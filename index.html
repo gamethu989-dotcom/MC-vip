@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Minecraft Web Lite</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+html,body{
+  margin:0;padding:0;
+  width:100%;height:100%;
+  background:#87ceeb;
+  overflow:hidden;
+  font-family:sans-serif;
+}
+#ui{
+  position:fixed;
+  top:8px;left:8px;
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  padding:8px 12px;
+  border-radius:10px;
+  font-size:14px;
+  line-height:1.4;
+  z-index:5;
+}
+#start{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.7);
+  color:#fff;
+  font-size:22px;
+  cursor:pointer;
+  z-index:10;
+}
+#craft{
+  position:fixed;
+  bottom:10px;
+  left:10px;
+  background:rgba(0,0,0,.6);
+  color:#fff;
+  padding:10px;
+  border-radius:10px;
+  font-size:13px;
+  display:none;
+}
+canvas{display:block}
+</style>
+</head>
+<body>
+
+<div id="ui">
+❤️ HP: <span id="hp">100</span><br>
+🍖 Đói: <span id="food">100</span><br>
+⛏ Khoáng: <span id="ore">0</span><br>
+⬅⬆⬇➡ di chuyển<br>
+Space: đào | C: chế tạo
+</div>
+
+<div id="craft">
+Chế tạo:<br>
+⛏ Cuốc đá (3 khoáng)<br>
+🗡 Kiếm đá (2 khoáng)
+</div>
+
+<div id="start">▶ BẤM OK / CLICK ĐỂ BẮT ĐẦU</div>
+<canvas id="game"></canvas>
+
+<!-- ÂM THANH -->
+<audio id="bgm" loop>
+ <source src="https://cdn.pixabay.com/download/audio/2022/10/30/audio_8f3a1c52b7.mp3" type="audio/mpeg">
+</audio>
+<audio id="s_break">
+ <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_7c41d3f45f.mp3" type="audio/mpeg">
+</audio>
+<audio id="s_step">
+ <source src="https://cdn.pixabay.com/download/audio/2022/02/23/audio_9d2c4c1f6b.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+/* ===== SETUP ===== */
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+
+function resize(){
+  canvas.width=innerWidth;
+  canvas.height=innerHeight;
+}
+resize();
+addEventListener('resize',resize);
+
+const TILE=32;
+let cols,rows;
+function calcGrid(){
+  cols=Math.floor(canvas.width/TILE);
+  rows=Math.floor(canvas.height/TILE);
+}
+calcGrid();
+
+/* ===== WORLD ===== */
+let world=[];
+const colors={
+  grass:'#3cb371',
+  dirt:'#8b4513',
+  ore:'#aaa',
+  tree:'#2e8b57'
+};
+
+function genWorld(){
+  world=[];
+  for(let y=0;y<rows;y++){
+    let r=[];
+    for(let x=0;x<cols;x++){
+      if(y>rows/2) r.push(Math.random()<0.12?'ore':'dirt');
+      else if(y===Math.floor(rows/2)) r.push('grass');
+      else if(y===Math.floor(rows/2)-1 && Math.random()<0.08) r.push('tree');
+      else r.push('air');
+    }
+    world.push(r);
+  }
+}
+
+/* ===== PLAYER ===== */
+const player={
+  x:5,y:5,
+  hp:100,food:100,
+  tool:false,weapon:false
+};
+const inv={ore:0};
+
+/* ===== NPC ===== */
+let mobs=[{x:15,y:5}];
+let villagers=[{x:10,y:5}];
+
+/* ===== DRAW ===== */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      let t=world[y][x];
+      if(t && t!=='air'){
+        ctx.fillStyle=colors[t];
+        ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+      }
+    }
+  }
+
+  // Villagers
+  ctx.fillStyle='blue';
+  villagers.forEach(v=>{
+    ctx.fillRect(v.x*TILE,v.y*TILE,TILE,TILE);
+  });
+
+  // Mobs
+  ctx.fillStyle='black';
+  mobs.forEach(m=>{
+    ctx.fillRect(m.x*TILE,m.y*TILE,TILE,TILE);
+  });
+
+  // Player
+  ctx.fillStyle='red';
+  ctx.fillRect(player.x*TILE,player.y*TILE,TILE,TILE);
+
+  document.getElementById('hp').textContent=Math.max(0,Math.floor(player.hp));
+  document.getElementById('food').textContent=Math.max(0,Math.floor(player.food));
+  document.getElementById('ore').textContent=inv.ore;
+}
+
+/* ===== GAME LOGIC ===== */
+const sBreak=document.getElementById('s_break');
+const sStep=document.getElementById('s_step');
+
+function move(dx,dy){
+  player.x=Math.max(0,Math.min(cols-1,player.x+dx));
+  player.y=Math.max(0,Math.min(rows-1,player.y+dy));
+  sStep.currentTime=0;sStep.play();
+}
+
+function breakBlock(){
+  let y=player.y+1;
+  let t=world[y]?.[player.x];
+  if(t==='ore') inv.ore++;
+  if(t && t!=='air'){
+    world[y][player.x]='air';
+    sBreak.currentTime=0;sBreak.play();
+  }
+}
+
+function craft(){
+  if(inv.ore>=3 && !player.tool){
+    player.tool=true;inv.ore-=3;
+    alert('Đã chế tạo Cuốc đá');
+  }else if(inv.ore>=2 && !player.weapon){
+    player.weapon=true;inv.ore-=2;
+    alert('Đã chế tạo Kiếm đá');
+  }
+}
+
+/* ===== AI (ĐÃ FIX LỖI) ===== */
+function mobsAI(){
+  mobs.forEach(m=>{
+    if(Math.random()<0.02){
+      m.x+=Math.sign(player.x-m.x);
+    }
+    if(m.x===player.x && m.y===player.y){
+      player.hp-=player.weapon?0.2:0.5;
+    }
+  });
+
+  villagers.forEach(v=>{
+    if(Math.random()<0.01){
+      v.x+=Math.random()<0.5?-1:1;
+    }
+    if(v.x===player.x && v.y===player.y && inv.ore>=1){
+      inv.ore--;
+      player.food=Math.min(100,player.food+20);
+    }
+  });
+}
+
+/* ===== LOOP ===== */
+function loop(){
+  player.food-=0.01;
+  if(player.food<=0) player.hp-=0.05;
+  mobsAI();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+/* ===== INPUT ===== */
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')move(-1,0);
+  if(e.key==='ArrowRight')move(1,0);
+  if(e.key==='ArrowUp')move(0,-1);
+  if(e.key==='ArrowDown')move(0,1);
+  if(e.code==='Space')breakBlock();
+  if(e.key==='c'||e.key==='C'){
+    document.getElementById('craft').style.display='block';
+    craft();
+  }
+});
+
+/* ===== START ===== */
+const start=document.getElementById('start');
+const bgm=document.getElementById('bgm');
+start.onclick=()=>{
+  start.style.display='none';
+  bgm.volume=0.4;
+  bgm.play();
+  genWorld();
+  loop();
+};
+</script>
+</body>
+</html>
